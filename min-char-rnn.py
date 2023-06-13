@@ -9,6 +9,7 @@ Changes by Andy Maloney <asmaloney@gmail.com>:
     - renamed some variables for clarity
     - added STARTING_TEXT string instead of just using one character
     - added constants at the top for easy modification
+    - added option USE_WORDS to use words instead of characters
 
 References:
     https://gist.github.com/karpathy/d4dee566867f8291f086
@@ -17,11 +18,28 @@ References:
 import numpy as np
 import numpy.typing as npt
 
-# constants
+# The input file (text)
 INPUT_FILE: str = "./data/Shakespeare-large.txt"
+
+# Text to start with
+# Note: the words in this text must appear in the input file
 STARTING_TEXT: str = "I was anointed king at nine months old.\n"
-SAMPLE_SIZE: int = 300  # how many characters to output in our sample
-SAMPLE_OUTPUT_FREQ: int = 1000  # how frequently to sample (e.g. every N iterations)
+
+# The number of characters to output in our sample
+SAMPLE_SIZE: int = 300
+
+# How frequently to sample (e.g. every N iterations)
+SAMPLE_OUTPUT_FREQ: int = 1000
+
+# Use words instead of characters
+USE_WORDS: bool = False
+
+# If using words instead of chars, adjust parameters so we get output in a reasonable time.
+# Might also consider using smaller data sets for experimenting since the number of tokens affects the run time dramatically.
+if USE_WORDS:
+    SAMPLE_SIZE = 100
+    SAMPLE_OUTPUT_FREQ = 10
+
 
 # hyperparameters
 HIDDEN_SIZE: int = 128  # size of hidden layer of neurons
@@ -31,36 +49,49 @@ LEARNING_RATE: float = 1e-1
 
 # type aliases for readability
 IntList = list[int]
+StringList = list[str]
 FloatArray = npt.NDArray[np.float64]
 
 
 class InputData:
-    def __init__(self, file_path: str, sequence_length: int, starting_text: str):
+    def __init__(
+        self, file_path: str, sequence_length: int, starting_text: str, use_words: bool
+    ):
         """
         Handles reading text data from a file and then accessing it in sequence.
         """
 
+        # initialize sequences
         self.sequence_length = sequence_length
         self.current_pos: int = 0
 
-        self.data: str = open(file_path, "r").read()
-        self.data_size: int = len(self.data)
+        # read data from file
+        data: str = open(file_path, "r").read()
 
-        chars: list[str] = list(set(self.data))
-        self.vocab_size: int = len(chars)
+        # store our token information
+        self.tokens: StringList = self.tokenize(data, use_words)
+        self.data_size: int = len(self.tokens)
 
-        print(f"input data has {self.data_size} characters ({self.vocab_size} unique)")
+        unique_tokens: StringList = list(set(self.tokens))
+        self.vocab_size: int = len(unique_tokens)
 
-        # create some mappings
-        self.char_to_ix: dict[str, int] = {ch: i for i, ch in enumerate(chars)}
-        self.ix_to_char: dict[int, str] = {i: ch for i, ch in enumerate(chars)}
+        print(f"input data has {self.data_size} tokens ({self.vocab_size} unique)")
+
+        # create token <-> index mappings
+        self.token_to_index: dict[str, int] = {
+            ch: i for i, ch in enumerate(unique_tokens)
+        }
+        self.index_to_token: dict[int, str] = {
+            i: ch for i, ch in enumerate(unique_tokens)
+        }
 
         # lookup and store our starting text indices
         self.start_indices: IntList = []
 
-        start_chars: list[str] = list(starting_text)
-        for i in range(len(start_chars)):
-            index: int = self.char_to_ix[start_chars[i]]
+        start_tokens: StringList = self.tokenize(starting_text, use_words)
+
+        for i in range(len(start_tokens)):
+            index: int = self.token_to_index[start_tokens[i]]
             self.start_indices.append(index)
 
     def nextInputsAndTargets(self) -> tuple[IntList, IntList]:
@@ -68,15 +99,15 @@ class InputData:
         Prepare inputs (we're sweeping from left to right in steps seq_length long)
         """
         inputs: IntList = [
-            self.char_to_ix[ch]
-            for ch in self.data[
+            self.token_to_index[ch]
+            for ch in self.tokens[
                 self.current_pos : self.current_pos + self.sequence_length
             ]
         ]
 
         targets: IntList = [
-            self.char_to_ix[ch]
-            for ch in self.data[
+            self.token_to_index[ch]
+            for ch in self.tokens[
                 self.current_pos + 1 : self.current_pos + self.sequence_length + 1
             ]
         ]
@@ -91,6 +122,11 @@ class InputData:
 
     def atStart(self) -> bool:
         return self.current_pos == 0
+
+    def tokenize(self, text: str, use_words: bool) -> StringList:
+        if use_words:
+            return text.split() + [" ", "\n"]
+        return list(text)
 
 
 class CharRNN:
@@ -216,7 +252,11 @@ class CharRNN:
             param += -self.learning_rate * dparam / np.sqrt(mem + 1e-8)
 
     def sample(
-        self, h: FloatArray, start_text_indices: IntList, sample_size: int
+        self,
+        h: FloatArray,
+        start_text_indices: IntList,
+        sample_size: int,
+        use_words: bool,
     ) -> str:
         """
         sample a sequence of integers from the model
@@ -240,11 +280,14 @@ class CharRNN:
             x[ix] = 1.0
             indices.append(ix)
 
-        return "".join(data.ix_to_char[ix] for ix in indices)
+        tokens: StringList = [data.index_to_token[ix] for ix in indices]
+        if use_words:
+            return " ".join(tokens)
+        return "".join(tokens)
 
 
 if __name__ == "__main__":
-    data = InputData(INPUT_FILE, SEQUENCE_LENGTH, STARTING_TEXT)
+    data = InputData(INPUT_FILE, SEQUENCE_LENGTH, STARTING_TEXT, USE_WORDS)
     rnn = CharRNN(data.vocab_size, HIDDEN_SIZE, LEARNING_RATE)
 
     # init RNN memory
@@ -263,7 +306,7 @@ if __name__ == "__main__":
 
         # sample from the model now and then
         if iteration_number % SAMPLE_OUTPUT_FREQ == 0:
-            txt = rnn.sample(h_prev, data.start_indices, SAMPLE_SIZE)
+            txt = rnn.sample(h_prev, data.start_indices, SAMPLE_SIZE, USE_WORDS)
             print(f"---- iteration {iteration_number}\n{txt}")
 
         # forward SEQUENCE_LENGTH characters through the net and fetch gradient
