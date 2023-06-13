@@ -10,20 +10,30 @@ To try to understand the code better, I've made the following changes:
 - renamed some variables for clarity
 - added `STARTING_TEXT` string instead of just starting with one character
 - added constants at the top for easy modification (see below)
-
+- added a way to use words instead of characters
 
 Since it isn't a complete command-line utility (not the goal here), there are several constants you can modify at the top of the code:
 
 - `INPUT_FILE`: the text it's using as its source
-- `STARTING_TEXT`: the text to start off with
+- `STARTING_TEXT`: the text to start off with (**Note:** the words in this text need to be in the input file)
 - `SAMPLE_SIZE`: how many characters to output
 - `SAMPLE_OUTPUT_FREQ`: output some sample text after this many iterations
+- `USE_WORDS`: use words instead of tokens (see below)
 - `HIDDEN_SIZE`: size of hidden layer of neurons
 - `SEQUENCE_LENGTH`: number of steps to unroll the RNN for
 - `LEARNING_RATE`: the learning rate
 
-The data directory contains some public domain text to try including Hans Christian Andersen, Shakespeare (large and small), and Sherlock Holmes. Change `INPUT_FILE` to point at one of these (and maybe modify the `STARTING_TEXT` to make more sense contextually)
+The data directory contains some public domain text to try including Hans Christian Andersen, Shakespeare (large and small), and Sherlock Holmes. Change `INPUT_FILE` to point at one of these (and modify the `STARTING_TEXT` to make more sense contextually)
 
+## Words vs. Characters
+
+I made some changes to allow the use of words instead of just characters. For the version that is strictly characters, see the [min-char-rnn](https://github.com/asmaloney/min-char-rnn/tree/min-char-rnn) tag.
+
+To use words, set `USE_WORDS` to `True`. It will automatically adjust some settings, but you may need to play with them a bit more to get results.
+
+Right now, the tokenization is very naive which affects the output. Eventually I will try a smarter tokenizer.
+
+## Running
 To run it:
 ```sh
 python3 min-char-rnn.py
@@ -31,7 +41,7 @@ python3 min-char-rnn.py
 
 This will continue to output text until you stop it with <kbd>Control</kbd>-<kbd>C</kbd>.
 
-Example:
+## Example Output
 ```
 % python3 min-char-rnn.py
 input data has 4573338 characters (67 unique)
