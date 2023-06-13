@@ -44,15 +44,16 @@ class InputData:
         self.current_pos: int = 0
 
         self.data: str = open(file_path, "r").read()
-        self.chars: list[str] = list(set(self.data))
         self.data_size: int = len(self.data)
-        self.vocab_size: int = len(self.chars)
+
+        chars: list[str] = list(set(self.data))
+        self.vocab_size: int = len(chars)
 
         print(f"input data has {self.data_size} characters ({self.vocab_size} unique)")
 
         # create some mappings
-        self.char_to_ix: dict[str, int] = {ch: i for i, ch in enumerate(self.chars)}
-        self.ix_to_char: dict[int, str] = {i: ch for i, ch in enumerate(self.chars)}
+        self.char_to_ix: dict[str, int] = {ch: i for i, ch in enumerate(chars)}
+        self.ix_to_char: dict[int, str] = {i: ch for i, ch in enumerate(chars)}
 
         # lookup and store our starting text indices
         self.start_indices: IntList = []
