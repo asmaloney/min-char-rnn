@@ -7,7 +7,7 @@ Changes by Andy Maloney <asmaloney@gmail.com>:
     - reorganized code using classes
     - added type hints
     - renamed some variables for clarity
-    - added STARTING_TEXT string instead of just using one character
+    - added STARTING_TEXT string to choose starting token
     - added constants at the top for easy modification
     - added option USE_WORDS to use words instead of characters
 
@@ -21,22 +21,22 @@ import numpy.typing as npt
 # The input file (text)
 INPUT_FILE: str = "./data/Shakespeare-large.txt"
 
-# Text to start with
-# Note: the words in this text must appear in the input file
-STARTING_TEXT: str = "I was anointed king at nine months old.\n"
+# Text to start with (character or word depending on USE_WORDS)
+STARTING_TEXT: str = "a"
 
-# The number of characters to output in our sample
+# The number of tokens to output in our sample
 SAMPLE_SIZE: int = 300
 
 # How frequently to sample (e.g. every N iterations)
 SAMPLE_OUTPUT_FREQ: int = 1000
 
 # Use words instead of characters
-USE_WORDS: bool = False
+USE_WORDS: bool = True
 
 # If using words instead of chars, adjust parameters so we get output in a reasonable time.
 # Might also consider using smaller data sets for experimenting since the number of tokens affects the run time dramatically.
 if USE_WORDS:
+    STARTING_TEXT = "king"  # Note: this word must appear in the input file
     SAMPLE_SIZE = 100
     SAMPLE_OUTPUT_FREQ = 10
 
@@ -85,14 +85,8 @@ class InputData:
             i: ch for i, ch in enumerate(unique_tokens)
         }
 
-        # lookup and store our starting text indices
-        self.start_indices: IntList = []
-
-        start_tokens: StringList = self.tokenize(starting_text, use_words)
-
-        for i in range(len(start_tokens)):
-            index: int = self.token_to_index[start_tokens[i]]
-            self.start_indices.append(index)
+        # lookup and store our starting text index
+        self.start_index = self.token_to_index[starting_text]
 
     def nextInputsAndTargets(self) -> tuple[IntList, IntList]:
         """
@@ -254,7 +248,7 @@ class CharRNN:
     def sample(
         self,
         h: FloatArray,
-        start_text_indices: IntList,
+        start_text_index: int,
         sample_size: int,
         use_words: bool,
     ) -> str:
@@ -265,10 +259,9 @@ class CharRNN:
 
         x: FloatArray = np.zeros((self.vocab_size, 1))
 
-        # init with out starting text's indices
-        indices: IntList = start_text_indices.copy()
-        for i in indices:
-            x[i] = 1.0
+        # init with our starting text's index
+        indices: IntList = [start_text_index]
+        x[start_text_index] = 1.0
 
         for _ in range(sample_size):
             h = np.tanh(np.dot(self.Wxh, x) + np.dot(self.Whh, h) + self.bh)
@@ -306,7 +299,7 @@ if __name__ == "__main__":
 
         # sample from the model now and then
         if iteration_number % SAMPLE_OUTPUT_FREQ == 0:
-            txt = rnn.sample(h_prev, data.start_indices, SAMPLE_SIZE, USE_WORDS)
+            txt = rnn.sample(h_prev, data.start_index, SAMPLE_SIZE, USE_WORDS)
             print(f"---- iteration {iteration_number}\n{txt}")
 
         # forward SEQUENCE_LENGTH characters through the net and fetch gradient
