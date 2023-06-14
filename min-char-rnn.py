@@ -25,7 +25,7 @@ INPUT_FILE: str = "./data/Shakespeare-large.txt"
 # Note: the words in this text must appear in the input file
 STARTING_TEXT: str = "I was anointed king at nine months old.\n"
 
-# The number of characters to output in our sample
+# The number of tokens to output in our sample
 SAMPLE_SIZE: int = 300
 
 # How frequently to sample (e.g. every N iterations)
@@ -265,7 +265,7 @@ class CharRNN:
 
         x: FloatArray = np.zeros((self.vocab_size, 1))
 
-        # init with out starting text's indices
+        # initialize with our starting text's indices
         indices: IntList = start_text_indices.copy()
         for i in indices:
             x[i] = 1.0
