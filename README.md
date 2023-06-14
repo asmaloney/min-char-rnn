@@ -8,14 +8,14 @@ To try to understand the code better, I've made the following changes:
 - reorganized the code using classes
 - added type hints
 - renamed some variables for clarity
-- added `STARTING_TEXT` string to choose starting token
+- added `STARTING_TEXT` string instead of just starting with one character
 - added constants at the top for easy modification (see below)
 - added a way to use words instead of characters
 
 Since it isn't a complete command-line utility (not the goal here), there are several constants you can modify at the top of the code:
 
 - `INPUT_FILE`: the text it's using as its source
-- `STARTING_TEXT`: the text to start off with (**Note:** if using `USE_WORDS`, the word needs to be in the input file)
+- `STARTING_TEXT`: the text to start off with (**Note:** the words in this text need to be in the input file)
 - `SAMPLE_SIZE`: how many characters to output
 - `SAMPLE_OUTPUT_FREQ`: output some sample text after this many iterations
 - `USE_WORDS`: use words instead of tokens (see below)
