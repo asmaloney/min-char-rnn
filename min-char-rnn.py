@@ -21,30 +21,30 @@ import numpy.typing as npt
 # The input file (text)
 INPUT_FILE: str = "./data/Shakespeare-large.txt"
 
-# Text to start with
+# Text to start our inferences with
 # Note: the words in this text must appear in the input file
-STARTING_TEXT: str = "I was anointed king at nine months old.\n"
+INFERENCE_STARTING_TEXT: str = "I was anointed king at nine months old.\n"
 
-# The number of tokens to output in our sample
-SAMPLE_SIZE: int = 300
+# The number of tokens to output in our inference sample
+INFERENCE_SAMPLE_SIZE: int = 300
 
-# How frequently to sample (e.g. every N iterations)
-SAMPLE_OUTPUT_FREQ: int = 1000
+# How frequently to run inference (e.g. every N iterations)
+INFERENCE_FREQUENCY: int = 1000
 
 # Use words instead of characters
-USE_WORDS: bool = False
+TRAINING_USE_WORDS: bool = False
 
 # If using words instead of chars, adjust parameters so we get output in a reasonable time.
 # Might also consider using smaller data sets for experimenting since the number of tokens affects the run time dramatically.
-if USE_WORDS:
-    SAMPLE_SIZE = 100
-    SAMPLE_OUTPUT_FREQ = 10
+if TRAINING_USE_WORDS:
+    INFERENCE_SAMPLE_SIZE = 100
+    INFERENCE_FREQUENCY = 10
 
 
 # hyperparameters
-HIDDEN_SIZE: int = 128  # size of hidden layer of neurons
-SEQUENCE_LENGTH: int = 50  # number of steps to unroll the RNN for
-LEARNING_RATE: float = 1e-1
+TRAINING_HIDDEN_SIZE: int = 128  # size of hidden layer of neurons
+TRAINING_SEQUENCE_LENGTH: int = 50  # number of steps to unroll the RNN for
+TRAINING_LEARNING_RATE: float = 1e-1
 
 
 # type aliases for readability
@@ -55,21 +55,25 @@ FloatArray = npt.NDArray[np.float64]
 
 class InputData:
     def __init__(
-        self, file_path: str, sequence_length: int, starting_text: str, use_words: bool
+        self,
+        input_file_path: str,
+        training_sequence_length: int,
+        training_use_words: bool,
+        inference_starting_text: str,
     ):
         """
         Handles reading text data from a file and then accessing it in sequence.
         """
 
         # initialize sequences
-        self.sequence_length = sequence_length
+        self.sequence_length = training_sequence_length
         self.current_pos: int = 0
 
         # read data from file
-        data: str = open(file_path, "r").read()
+        data: str = open(input_file_path, "r").read()
 
         # store our token information
-        self.tokens: StringList = self.tokenize(data, use_words)
+        self.tokens: StringList = self.tokenize(data, training_use_words)
         self.data_size: int = len(self.tokens)
 
         unique_tokens: StringList = list(set(self.tokens))
@@ -86,13 +90,15 @@ class InputData:
         }
 
         # lookup and store our starting text indices
-        self.start_indices: IntList = []
+        self.inference_start_indices: IntList = []
 
-        start_tokens: StringList = self.tokenize(starting_text, use_words)
+        start_tokens: StringList = self.tokenize(
+            inference_starting_text, training_use_words
+        )
 
         for i in range(len(start_tokens)):
             index: int = self.token_to_index[start_tokens[i]]
-            self.start_indices.append(index)
+            self.inference_start_indices.append(index)
 
     def nextInputsAndTargets(self) -> tuple[IntList, IntList]:
         """
@@ -159,13 +165,13 @@ class CharRNN:
         self.mbh: FloatArray = np.zeros_like(self.bh)
         self.mby: FloatArray = np.zeros_like(self.by)
 
-    def lossFun(
-        self, inputs: IntList, targets: IntList, hprev: FloatArray
+    def train(
+        self, inputs: IntList, targets: IntList, hidden_initial: FloatArray
     ) -> tuple[
         float, FloatArray, FloatArray, FloatArray, FloatArray, FloatArray, FloatArray
     ]:
         """
-        hprev is Hx1 array of initial hidden state
+        hidden_initial is Hx1 array of initial hidden state
         returns the loss, gradients on model parameters, and last hidden state
         """
 
@@ -179,7 +185,7 @@ class CharRNN:
         ps: list[FloatArray] = [np.empty([]) for _ in range(num_inputs)]
         ys: list[FloatArray] = [np.empty([]) for _ in range(num_inputs)]
         hs: list[FloatArray] = [np.empty([]) for _ in range(num_inputs)]
-        hs[-1] = np.copy(hprev)
+        hs[-1] = np.copy(hidden_initial)
 
         loss: float = 0.0
 
@@ -251,28 +257,28 @@ class CharRNN:
             mem += dparam * dparam
             param += -self.learning_rate * dparam / np.sqrt(mem + 1e-8)
 
-    def sample(
+    def infer(
         self,
-        h: FloatArray,
-        start_text_indices: IntList,
-        sample_size: int,
-        use_words: bool,
+        memory: FloatArray,
+        inference_start_text_indices: IntList,
+        inference_sample_size: int,
+        training_use_words: bool,
     ) -> str:
         """
         sample a sequence of integers from the model
-        h is memory state, start_text_indices is list of character indices for the starting text
+        memory is memory state, inference_start_text_indices is list of token indices for the starting text
         """
 
         x: FloatArray = np.zeros((self.vocab_size, 1))
 
         # initialize with our starting text's indices
-        indices: IntList = start_text_indices.copy()
+        indices: IntList = inference_start_text_indices.copy()
         for i in indices:
             x[i] = 1.0
 
-        for _ in range(sample_size):
-            h = np.tanh(np.dot(self.Wxh, x) + np.dot(self.Whh, h) + self.bh)
-            y: FloatArray = np.dot(self.Why, h) + self.by
+        for _ in range(inference_sample_size):
+            memory = np.tanh(np.dot(self.Wxh, x) + np.dot(self.Whh, memory) + self.bh)
+            y: FloatArray = np.dot(self.Why, memory) + self.by
             expy: FloatArray = np.exp(y)
             p: FloatArray = expy / np.sum(expy)
             ix = np.random.choice(range(self.vocab_size), p=p.ravel())
@@ -281,39 +287,49 @@ class CharRNN:
             indices.append(ix)
 
         tokens: StringList = [data.index_to_token[ix] for ix in indices]
-        if use_words:
+        if training_use_words:
             return " ".join(tokens)
         return "".join(tokens)
 
 
 if __name__ == "__main__":
-    data = InputData(INPUT_FILE, SEQUENCE_LENGTH, STARTING_TEXT, USE_WORDS)
-    rnn = CharRNN(data.vocab_size, HIDDEN_SIZE, LEARNING_RATE)
+    data = InputData(
+        INPUT_FILE,
+        TRAINING_SEQUENCE_LENGTH,
+        TRAINING_USE_WORDS,
+        INFERENCE_STARTING_TEXT,
+    )
+    rnn = CharRNN(data.vocab_size, TRAINING_HIDDEN_SIZE, TRAINING_LEARNING_RATE)
 
     # init RNN memory
-    h_prev: FloatArray = np.zeros((HIDDEN_SIZE, 1))
+    memory: FloatArray = np.zeros((TRAINING_HIDDEN_SIZE, 1))
 
     # loss at iteration 0
-    smooth_loss: float = -np.log(1.0 / data.vocab_size) * SEQUENCE_LENGTH
+    smooth_loss: float = -np.log(1.0 / data.vocab_size) * TRAINING_SEQUENCE_LENGTH
 
     iteration_number: int = 0
 
     while True:
         if data.atStart():
-            h_prev.fill(0.0)
+            memory.fill(0.0)
 
         inputs, targets = data.nextInputsAndTargets()
 
-        # sample from the model now and then
-        if iteration_number % SAMPLE_OUTPUT_FREQ == 0:
-            txt = rnn.sample(h_prev, data.start_indices, SAMPLE_SIZE, USE_WORDS)
+        # infer a sample from the model now and then
+        if iteration_number % INFERENCE_FREQUENCY == 0:
+            txt = rnn.infer(
+                memory,
+                data.inference_start_indices,
+                INFERENCE_SAMPLE_SIZE,
+                TRAINING_USE_WORDS,
+            )
             print(f"---- iteration {iteration_number}\n{txt}")
 
-        # forward SEQUENCE_LENGTH characters through the net and fetch gradient
-        loss, dWxh, dWhh, dWhy, dbh, dby, h_prev = rnn.lossFun(inputs, targets, h_prev)
+        # forward TRAINING_SEQUENCE_LENGTH tokens through the net and fetch gradient
+        loss, dWxh, dWhh, dWhy, dbh, dby, memory = rnn.train(inputs, targets, memory)
         smooth_loss = smooth_loss * 0.999 + (loss * 0.001)
 
-        if iteration_number % SAMPLE_OUTPUT_FREQ == 0:
+        if iteration_number % INFERENCE_FREQUENCY == 0:
             print(f"---- iteration {iteration_number}; loss: {smooth_loss}\n")
 
         # update the model
