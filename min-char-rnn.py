@@ -18,7 +18,7 @@ References:
 import numpy as np
 import numpy.typing as npt
 
-# The input file (text)
+# The input file (text) to use as a source for training
 INPUT_FILE: str = "./data/Shakespeare-large.txt"
 
 # Text to start our inferences with
