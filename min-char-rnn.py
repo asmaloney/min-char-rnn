@@ -135,7 +135,7 @@ class InputData:
         return list(text)
 
 
-class CharRNN:
+class RNN:
     def __init__(self, vocab_size: int, hidden_size: int, learning_rate: float):
         self.vocab_size = vocab_size
         self.learning_rate = learning_rate
@@ -166,7 +166,11 @@ class CharRNN:
         self.mby: FloatArray = np.zeros_like(self.by)
 
     def train(
-        self, inputs: IntList, targets: IntList, hidden_initial: FloatArray
+        self,
+        inputs: IntList,
+        targets: IntList,
+        vocab_size: int,
+        hidden_initial: FloatArray,
     ) -> tuple[
         float, FloatArray, FloatArray, FloatArray, FloatArray, FloatArray, FloatArray
     ]:
@@ -178,9 +182,7 @@ class CharRNN:
         num_inputs: int = len(inputs)
 
         # encode in 1-of-k representation
-        xs: list[FloatArray] = [
-            np.zeros((data.vocab_size, 1)) for _ in range(num_inputs)
-        ]
+        xs: list[FloatArray] = [np.zeros((vocab_size, 1)) for _ in range(num_inputs)]
 
         ps: list[FloatArray] = [np.empty([]) for _ in range(num_inputs)]
         ys: list[FloatArray] = [np.empty([]) for _ in range(num_inputs)]
@@ -260,10 +262,10 @@ class CharRNN:
     def infer(
         self,
         memory: FloatArray,
+        vocab_size: int,
         inference_start_text_indices: IntList,
         inference_sample_size: int,
-        training_use_words: bool,
-    ) -> str:
+    ) -> IntList:
         """
         sample a sequence of integers from the model
         memory is memory state, inference_start_text_indices is list of token indices for the starting text
@@ -282,14 +284,11 @@ class CharRNN:
             expy: FloatArray = np.exp(y)
             p: FloatArray = expy / np.sum(expy)
             ix = np.random.choice(range(self.vocab_size), p=p.ravel())
-            x = np.zeros((data.vocab_size, 1))
+            x = np.zeros((vocab_size, 1))
             x[ix] = 1.0
             indices.append(ix)
 
-        tokens: StringList = [data.index_to_token[ix] for ix in indices]
-        if training_use_words:
-            return " ".join(tokens)
-        return "".join(tokens)
+        return indices
 
 
 if __name__ == "__main__":
@@ -299,7 +298,7 @@ if __name__ == "__main__":
         TRAINING_USE_WORDS,
         INFERENCE_STARTING_TEXT,
     )
-    rnn = CharRNN(data.vocab_size, TRAINING_HIDDEN_SIZE, TRAINING_LEARNING_RATE)
+    rnn = RNN(data.vocab_size, TRAINING_HIDDEN_SIZE, TRAINING_LEARNING_RATE)
 
     # init RNN memory
     memory: FloatArray = np.zeros((TRAINING_HIDDEN_SIZE, 1))
@@ -317,16 +316,26 @@ if __name__ == "__main__":
 
         # infer a sample from the model now and then
         if iteration_number % INFERENCE_FREQUENCY == 0:
-            txt = rnn.infer(
+            indices = rnn.infer(
                 memory,
+                data.vocab_size,
                 data.inference_start_indices,
                 INFERENCE_SAMPLE_SIZE,
-                TRAINING_USE_WORDS,
             )
+
+            tokens: StringList = [data.index_to_token[ix] for ix in indices]
+            txt: str = ""
+            if TRAINING_USE_WORDS:
+                txt = " ".join(tokens)
+            else:
+                txt = "".join(tokens)
+
             print(f"---- iteration {iteration_number}\n{txt}")
 
         # forward TRAINING_SEQUENCE_LENGTH tokens through the net and fetch gradient
-        loss, dWxh, dWhh, dWhy, dbh, dby, memory = rnn.train(inputs, targets, memory)
+        loss, dWxh, dWhh, dWhy, dbh, dby, memory = rnn.train(
+            inputs, targets, data.vocab_size, memory
+        )
         smooth_loss = smooth_loss * 0.999 + (loss * 0.001)
 
         if iteration_number % INFERENCE_FREQUENCY == 0:
